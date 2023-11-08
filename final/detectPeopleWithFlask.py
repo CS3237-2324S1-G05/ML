@@ -53,9 +53,9 @@ def person_model(filename):
         im.save('results.jpg')  # save image
         toSend = ""
         if len(r.boxes) == 0:
-            toSend = "FALSE"
+            toSend = "0"
         else:
-            toSend = "TRUE"
+            toSend = "1"
             
         connect_mqtt(toSend, TOPIC_MQTT)
 

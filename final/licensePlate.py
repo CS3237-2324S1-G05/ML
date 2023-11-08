@@ -29,7 +29,8 @@ dict_char_to_int = {'O': '0',
                     'B': '8',
                     'S': '5'}
 
-dict_int_to_char = {'2': 'Z',
+dict_int_to_char = {'0': 'D',
+                    '2': 'Z',
                     '7': 'Z',
                     '3': 'J',
                     '4': 'A',
@@ -76,6 +77,7 @@ def read_license_plate(license_plate_crop):
     result = ''
     for detection in detections:
         bbox, text, score = detection
+        print(text)
         text = text.upper().replace(' ', '')
 
         result = format_license(text)
@@ -96,7 +98,7 @@ def connect_mqtt(carplate):
 
     client = mqtt.Client()
     client.on_connect = on_connect
-    client.connect("192.168.86.80", 1883, 60)
+    client.connect("192.168.43.156", 1883, 60)
     client.loop_start()
     sleep(5)
     client.disconnect()
@@ -130,12 +132,11 @@ def detect_license_plate(license_plate_img, model_path):
         blurred = cv2.GaussianBlur(sharpened, (3, 3), 0)
         cv2.imwrite(f'plates/license_plate_{i+1}.jpeg', blurred)
         
-        results = str(read_license_plate(plate_filename)) #read_license_plate(plate_filename)
+        results = str(read_license_plate(plate_filename))
         print(f"License Plate number: {results}")
         connect_mqtt(str(results))
 
     return 0
 
 # load the image and resize it
-
-detect_license_plate('testImages/blurnumberplate.jpeg', 'last.pt')
+detect_license_plate('testImages/blurblur.jpeg', 'last.pt')

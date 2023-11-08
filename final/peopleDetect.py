@@ -56,4 +56,4 @@ def connect_mqtt(carplate):
 
     return client
 
-detectPerson('testImages/venuscam.jpg')
+detectPerson('testImages/blurblur.jpeg')

@@ -14,20 +14,12 @@ from time import sleep
 from flask import Flask, request, jsonify, url_for, redirect
 from ultralytics import YOLO
 
-IPADDRESS_MQTT = "192.168.86.181"
+IPADDRESS_MQTT = "192.168.86.80"
 MY_IP_ADDRESS = "192.168.86.249"
 
 TOPIC_MQTT_ENTRANCE = "status/ml/entrance/carplate"
 TOPIC_MQTT_EXIT = "status/ml/exit/carplate"
 TOPIC_MQTT_LOT = "status/ml/lot/carplate/"
-
-def on_connect(client, userdata, flags, rc, carplate):
-    print("Connected with result code: " + str(rc))
-    print("Waiting for 2 seconds")
-    sleep(2)
-
-    print("Sending message.")
-    client.publish("detect/people", carplate)
 
 # Initialize the OCR reader
 reader = easyocr.Reader(['en'], gpu=False)
@@ -43,7 +35,8 @@ dict_char_to_int = {'O': '0',
                     'B': '8',
                     'S': '5'}
 
-dict_int_to_char = {'2': 'Z',
+dict_int_to_char = {'0': 'D',
+                    '2': 'Z',
                     '3': 'J',
                     '4': 'A',
                     '6': 'G',
@@ -55,13 +48,13 @@ def license_complies_format(text):
         return False
 
     if (text[0] in string.ascii_uppercase and text[0] in ['S', '5']) and \
-       ((text[1] in string.ascii_uppercase or text[1] in dict_int_to_char.keys()) and text[1] not in ['1', '0', 'O', 'I']) and \
-       ((text[2] in  string.ascii_uppercase or text[2] in dict_char_to_int.keys()) and text[2] not in ['1', '0', 'O', 'I'] ) and \
+       ((text[1] in string.ascii_uppercase or text[1] in dict_int_to_char.keys())) and \
+       ((text[2] in  string.ascii_uppercase or text[2] in dict_char_to_int.keys())) and \
        (text[3] in ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'] or text[3] in dict_char_to_int.keys()) and \
        (text[4] in ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'] or text[4] in dict_char_to_int.keys()) and \
        (text[5] in ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'] or text[5] in dict_char_to_int.keys()) and \
        (text[6] in ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'] or text[6] in dict_char_to_int.keys()) and \
-       ((text[7] in string.ascii_uppercase or text[7] in dict_int_to_char.keys()) and text[7] not in ['F', 'I', 'N', 'O', 'V', 'W']):
+       ((text[7] in string.ascii_uppercase or text[7] in dict_int_to_char.keys())):
         return True
     else:
         return False
@@ -88,32 +81,10 @@ def read_license_plate(license_plate_crop):
 
     for detection in detections:
         bbox, text, score = detection
-
         text = text.upper().replace(' ', '')
-
         return format_license(text)
 
     return format_license(text)
-
-def auto_canny(image, sigma=0.33):
-    v = np.median(image)
-    lower = int(max(0, (1.0 - sigma) * v))
-    upper = int(min(255, (1.0 + sigma) * v))
-    edged = cv2.Canny(image, lower, upper)
-    return edged
-
-
-def increase_brightness(img, value):
-    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-    h, s, v = cv2.split(hsv)
-
-    lim = 255 - value
-    v[v > lim] = 255
-    v[v <= lim] += value
-
-    final_hsv = cv2.merge((h, s, v))
-    img = cv2.cvtColor(final_hsv, cv2.COLOR_HSV2BGR)
-    return img
 
 #source: https://stackoverflow.com/questions/76899615/yolov8-how-to-save-the-output-of-model
 def detect_license_plate(license_plate_img, model_path):
@@ -125,8 +96,8 @@ def detect_license_plate(license_plate_img, model_path):
     
     # Run inference on an image
     detected = model(img)
+    results = ''
     license_plate_boxes = detected[0].boxes.data.cpu().numpy()
-    print(detected[0].boxes.data.cpu().numpy())
     for i, box in enumerate(license_plate_boxes):
         x1, y1, x2, y2, conf, cls = box
         license_plate = img.crop((x1, y1, x2, y2))
@@ -135,17 +106,17 @@ def detect_license_plate(license_plate_img, model_path):
 
          #sharpen image
         img = cv2.imread(plate_filename)
-        kernel = np.array([[0, -1, 0], [-1, 9, -1], [0, -1, 0]])
-        blurred = cv2.GaussianBlur(img, (3, 3), 0)
-        auto_edge = auto_canny(blurred)
-        cv2.imshow("image", auto_edge)
-        cv2.waitKey(0)
-        cv2.imwrite(f'plates/license_plate_{i+1}.jpg', auto_edge)
+        kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]])
+        sharpened = cv2.filter2D(img, -1, kernel)
+        blurred = cv2.GaussianBlur(sharpened, (3, 3), 0)
+        #cv2.imshow("image", auto_edge)
+        #cv2.waitKey(0)
+        cv2.imwrite(f'plates/license_plate_{i+1}.jpg', blurred)
 
         results = read_license_plate(plate_filename)
         print(f"License Plate number: {results}")
 
-    return 0
+    return results
 
 def connect_mqtt(carplate, publish_endpoint):
     def on_connect(client, userdata, flags, rc):
@@ -155,6 +126,7 @@ def connect_mqtt(carplate, publish_endpoint):
             sleep(2)
 
             print("Sending message.")
+            print(carplate)
             client.publish(publish_endpoint, carplate)
         else:
             print("Failed to connect, return code %d\n")
@@ -189,8 +161,11 @@ def upload_image_entrance():
 
 @app.route('/ml/carpark', methods=['POST'])
 def upload_image_carpark():
-    data_dict = request.get_json()
-    mqttStr = TOPIC_MQTT_LOT + data_dict
+
+    id = request.files['id'].filename
+
+    print(id)
+    mqttStr = TOPIC_MQTT_LOT + "/" + id
     flask_body('CARS_FOLDER_CARPARK', mqttStr)
     
 @app.route('/ml/exit', methods=['POST'])
