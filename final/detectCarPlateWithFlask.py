@@ -1,7 +1,7 @@
 #source: https://github.com/computervisioneng/automatic-number-plate-recognition-python-yolov8/blob/main/util.py
 #dataset: https://universe.roboflow.com/roboflow-universe-projects/license-plate-recognition-rxg4e/dataset/4
 
-import easyocr
+from paddleocr import PaddleOCR
 import string
 import cv2
 import matplotlib.pyplot as plt
@@ -10,19 +10,18 @@ from PIL import Image
 import os
 import paho.mqtt.client as mqtt
 from time import sleep
-
 from flask import Flask, request, jsonify, url_for, redirect
 from ultralytics import YOLO
 
-IPADDRESS_MQTT = "192.168.86.80"
-MY_IP_ADDRESS = "192.168.86.249"
+IPADDRESS_MQTT = "192.168.43.186"
+MY_IP_ADDRESS = "192.168.43.28"
 
 TOPIC_MQTT_ENTRANCE = "status/ml/entrance/carplate"
 TOPIC_MQTT_EXIT = "status/ml/exit/carplate"
 TOPIC_MQTT_LOT = "status/ml/lot/carplate/"
 
 # Initialize the OCR reader
-reader = easyocr.Reader(['en'], gpu=False)
+reader = PaddleOCR(use_angle_cls=True, lang='en')
 
 # Mapping dictionaries for character conversion
 dict_first_letter = {'S': 'S', '5': 'S'}
@@ -41,7 +40,9 @@ dict_int_to_char = {'0': 'D',
                     '4': 'A',
                     '6': 'G',
                     '5': 'S',
-                    '8': 'B'}
+                    '7': 'Z',
+                    '8': 'B',
+                    '@': 'D'}
 
 def license_complies_format(text):
     if len(text) != 8:
@@ -77,41 +78,41 @@ def format_license(text):
     return license_plate_
 
 def read_license_plate(license_plate_crop):
-    detections = reader.readtext(license_plate_crop)
+    detections = reader.ocr(license_plate_crop)
 
+    '''
     for detection in detections:
         bbox, text, score = detection
+        print(text)
         text = text.upper().replace(' ', '')
         return format_license(text)
+    '''
 
-    return format_license(text)
+    for detection in range(len(detections)):
+        res = detections[detection]
+        for line in res:
+            return format_license(str(line[-1][0]).replace(" ", ""))
+
+
+    #return format_license(text)
 
 #source: https://stackoverflow.com/questions/76899615/yolov8-how-to-save-the-output-of-model
 def detect_license_plate(license_plate_img, model_path):
     photo_path = os.path.join(license_plate_img)
-    img = Image.open(photo_path)
+    img_raw = Image.open(photo_path)
     
     # Load a model
     model = YOLO(model_path)  # load a custom model
     
     # Run inference on an image
-    detected = model(img)
+    detected = model(img_raw)
     results = ''
     license_plate_boxes = detected[0].boxes.data.cpu().numpy()
     for i, box in enumerate(license_plate_boxes):
         x1, y1, x2, y2, conf, cls = box
-        license_plate = img.crop((x1, y1, x2, y2))
+        license_plate = img_raw.crop((x1, y1, x2, y2))
         plate_filename = f'plates/license_plate_{i+1}.jpg'
         license_plate.save(plate_filename)
-
-         #sharpen image
-        img = cv2.imread(plate_filename)
-        kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]])
-        sharpened = cv2.filter2D(img, -1, kernel)
-        blurred = cv2.GaussianBlur(sharpened, (3, 3), 0)
-        #cv2.imshow("image", auto_edge)
-        #cv2.waitKey(0)
-        cv2.imwrite(f'plates/license_plate_{i+1}.jpg', blurred)
 
         results = read_license_plate(plate_filename)
         print(f"License Plate number: {results}")
@@ -143,7 +144,7 @@ def connect_mqtt(carplate, publish_endpoint):
 
 app = Flask(__name__)
 
-# Set the directory where you want to store the uploaded images
+# Set image directory
 UPLOAD_FOLDER_ENTRANCE = 'entrance'
 app.config['CARS_FOLDER_ENTRANCE'] = UPLOAD_FOLDER_ENTRANCE
 UPLOAD_FOLDER_CARPARK = 'carpark'
@@ -151,7 +152,7 @@ app.config['CARS_FOLDER_CARPARK'] = UPLOAD_FOLDER_CARPARK
 UPLOAD_FOLDER_EXIT = 'exit'
 app.config['CARS_FOLDER_EXIT'] = UPLOAD_FOLDER_EXIT
 
-# Function to check if the file is an allowed image format
+# Check if allowed format
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'jpg', 'jpeg', 'png'}
 
@@ -162,8 +163,7 @@ def upload_image_entrance():
 @app.route('/ml/carpark', methods=['POST'])
 def upload_image_carpark():
 
-    id = request.files['id'].filename
-
+    id = request.headers.get('id')
     print(id)
     mqttStr = TOPIC_MQTT_LOT + "/" + id
     flask_body('CARS_FOLDER_CARPARK', mqttStr)
@@ -193,7 +193,7 @@ def flask_body(upload_string, mqttStr):
         file.save(filename)
         result = str(detect_license_plate(filename, 'last.pt'))
         connect_mqtt(result, mqttStr)
-        return redirect("message received")#url_for('upload_image_entrance', filename=filename))
+        return redirect("message received") #url_for('upload_image_entrance', filename=filename))
 
 if __name__ == '__main__':
     # Ensure the "uploads" folder exists

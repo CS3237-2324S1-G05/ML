@@ -1,7 +1,7 @@
 #source: https://github.com/computervisioneng/automatic-number-plate-recognition-python-yolov8/blob/main/util.py
 #dataset: https://universe.roboflow.com/roboflow-universe-projects/license-plate-recognition-rxg4e/dataset/4
 
-import easyocr
+from paddleocr import PaddleOCR
 import string
 import cv2
 import matplotlib.pyplot as plt
@@ -15,7 +15,7 @@ import paho.mqtt.client as mqtt
 from time import sleep
 
 # Initialize the OCR reader
-reader = easyocr.Reader(['en'], gpu=False)
+reader = PaddleOCR(use_angle_cls=True, lang='en')
 results = ''
 # Mapping dictionaries for character conversion
 dict_first_letter = {'S': 'S', '5': 'S'}
@@ -27,6 +27,7 @@ dict_char_to_int = {'O': '0',
                     'A': '4',
                     'G': '6',
                     'B': '8',
+                    'Z': '2',
                     'S': '5'}
 
 dict_int_to_char = {'0': 'D',
@@ -72,17 +73,13 @@ def format_license(text):
     return license_plate_
 
 def read_license_plate(license_plate_crop):
-    detections = reader.readtext(license_plate_crop)
+    detections = reader.ocr(license_plate_crop)
 
-    result = ''
-    for detection in detections:
-        bbox, text, score = detection
-        print(text)
-        text = text.upper().replace(' ', '')
-
-        result = format_license(text)
-
-    return result
+    for detection in range(len(detections)):
+        res = detections[detection]
+        for line in res:
+            print(line[-1][0])
+            return format_license(str(line[-1][0]).replace(" ", ""))
 
 def connect_mqtt(carplate):
     def on_connect(client, userdata, flags, rc):
@@ -109,34 +106,50 @@ def connect_mqtt(carplate):
 #source: https://stackoverflow.com/questions/76899615/yolov8-how-to-save-the-output-of-model
 def detect_license_plate(license_plate_img, model_path):
     photo_path = os.path.join(license_plate_img)
-    img = Image.open(photo_path)
-
+    img_raw = Image.open(photo_path)
+    
     # Load a model
     model = YOLO(model_path)  # load a custom model
     
     # Run inference on an image
-    detected = model(img)
+    detected = model(img_raw)
     
     license_plate_boxes = detected[0].boxes.data.cpu().numpy()
     print(detected[0].boxes.data.cpu().numpy())
     for i, box in enumerate(license_plate_boxes):
         x1, y1, x2, y2, conf, cls = box
-        license_plate = img.crop((x1, y1, x2, y2))
+        license_plate = img_raw.crop((x1, y1, x2, y2))
         plate_filename = f'plates/license_plate_{i+1}.jpeg'
         license_plate.save(plate_filename)
 
-        #sharpen image
-        imgCv = cv2.imread(plate_filename)
+       #sharpen image
+        img = cv2.imread(plate_filename)
+
+        #increase constrast, source:
+        #https://stackoverflow.com/questions/39308030/how-do-i-increase-the-contrast-of-an-image-in-python-opencv
+        lab= cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+        l_channel, a, b = cv2.split(lab)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+        cl = clahe.apply(l_channel)
+        limg = cv2.merge((cl,a,b))
+        increasedConstrast = cv2.cvtColor(limg, cv2.COLOR_LAB2BGR)
+
         kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]])
-        sharpened = cv2.filter2D(imgCv, -1, kernel)
-        blurred = cv2.GaussianBlur(sharpened, (3, 3), 0)
-        cv2.imwrite(f'plates/license_plate_{i+1}.jpeg', blurred)
-        
-        results = str(read_license_plate(plate_filename))
+        #sharpened = cv2.filter2D(increasedConstrast, -1, kernel)
+        blurred = cv2.GaussianBlur(increasedConstrast, (3, 3), 0)
+
+        #gray scale
+        gray = cv2.cvtColor(blurred, cv2.COLOR_BGR2GRAY)
+        bfilter = cv2.bilateralFilter(gray, 11, 11, 17)
+        edged = cv2.Canny(bfilter, 30, 200)
+ 
+        #cv2.imwrite(plate_filename, edged)
+
+        results = read_license_plate(plate_filename)
         print(f"License Plate number: {results}")
         connect_mqtt(str(results))
 
     return 0
 
 # load the image and resize it
-detect_license_plate('testImages/blurblur.jpeg', 'last.pt')
+detect_license_plate('testImages/license_plate_1.jpeg', 'last.pt')
