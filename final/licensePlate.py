@@ -16,7 +16,7 @@ from time import sleep
 
 # Initialize the OCR reader
 reader = PaddleOCR(use_angle_cls=True, lang='en')
-results = ''
+
 # Mapping dictionaries for character conversion
 dict_first_letter = {'S': 'S', '5': 'S'}
 
@@ -74,12 +74,16 @@ def format_license(text):
 
 def read_license_plate(license_plate_crop):
     detections = reader.ocr(license_plate_crop)
+    result = 'INVALID'
 
     for detection in range(len(detections)):
         res = detections[detection]
         for line in res:
-            print(line[-1][0])
-            return format_license(str(line[-1][0]).replace(" ", ""))
+            license_plate_str = str(line[-1][0]).replace(" ", "")
+            if (license_complies_format(license_plate_str)):
+                result = format_license(license_plate_str)
+    
+    return result
 
 def connect_mqtt(carplate):
     def on_connect(client, userdata, flags, rc):
@@ -116,40 +120,19 @@ def detect_license_plate(license_plate_img, model_path):
     
     license_plate_boxes = detected[0].boxes.data.cpu().numpy()
     print(detected[0].boxes.data.cpu().numpy())
-    for i, box in enumerate(license_plate_boxes):
-        x1, y1, x2, y2, conf, cls = box
-        license_plate = img_raw.crop((x1, y1, x2, y2))
-        plate_filename = f'plates/license_plate_{i+1}.jpeg'
-        license_plate.save(plate_filename)
+    result = ''
 
-       #sharpen image
-        img = cv2.imread(plate_filename)
+    if detected[0].boxes.data.cpu().numpy().size != 0:
+        for i, box in enumerate(license_plate_boxes):
+            x1, y1, x2, y2, conf, cls = box
+            license_plate = img_raw.crop((x1, y1, x2, y2))
+            plate_filename = f'plates/license_plate_{i+1}.jpeg'
+            license_plate.save(plate_filename)
 
-        #increase constrast, source:
-        #https://stackoverflow.com/questions/39308030/how-do-i-increase-the-contrast-of-an-image-in-python-opencv
-        lab= cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
-        l_channel, a, b = cv2.split(lab)
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-        cl = clahe.apply(l_channel)
-        limg = cv2.merge((cl,a,b))
-        increasedConstrast = cv2.cvtColor(limg, cv2.COLOR_LAB2BGR)
+            result = read_license_plate(plate_filename)
 
-        kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]])
-        #sharpened = cv2.filter2D(increasedConstrast, -1, kernel)
-        blurred = cv2.GaussianBlur(increasedConstrast, (3, 3), 0)
-
-        #gray scale
-        gray = cv2.cvtColor(blurred, cv2.COLOR_BGR2GRAY)
-        bfilter = cv2.bilateralFilter(gray, 11, 11, 17)
-        edged = cv2.Canny(bfilter, 30, 200)
- 
-        #cv2.imwrite(plate_filename, edged)
-
-        results = read_license_plate(plate_filename)
-        print(f"License Plate number: {results}")
-        connect_mqtt(str(results))
-
-    return 0
+    print(f"License Plate number: {result}")
+    return result
 
 # load the image and resize it
 detect_license_plate('testImages/license_plate_1.jpeg', 'last.pt')

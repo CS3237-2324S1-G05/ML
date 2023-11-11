@@ -1,16 +1,13 @@
-#source: https://github.com/computervisioneng/automatic-number-plate-recognition-python-yolov8/blob/main/util.py
-#dataset: https://universe.roboflow.com/roboflow-universe-projects/license-plate-recognition-rxg4e/dataset/4
+#source for carplate recognition: https://github.com/computervisioneng/automatic-number-plate-recognition-python-yolov8/blob/main/util.py
+#dataset for carplate recognition: https://universe.roboflow.com/roboflow-universe-projects/license-plate-recognition-rxg4e/dataset/4
 
 from paddleocr import PaddleOCR
-import string
-import cv2
-import matplotlib.pyplot as plt
-import numpy as np
 from PIL import Image
+import string
 import os
 import paho.mqtt.client as mqtt
 from time import sleep
-from flask import Flask, request, jsonify, url_for, redirect
+from flask import Flask, request, jsonify, redirect
 from ultralytics import YOLO
 
 IPADDRESS_MQTT = "192.168.43.186"
@@ -43,81 +40,80 @@ dict_int_to_char = {'0': 'D',
                     '7': 'Z',
                     '8': 'B',
                     '@': 'D'}
-
-def license_complies_format(text):
-    if len(text) != 8:
-        return False
-
-    if (text[0] in string.ascii_uppercase and text[0] in ['S', '5']) and \
-       ((text[1] in string.ascii_uppercase or text[1] in dict_int_to_char.keys())) and \
-       ((text[2] in  string.ascii_uppercase or text[2] in dict_char_to_int.keys())) and \
-       (text[3] in ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'] or text[3] in dict_char_to_int.keys()) and \
-       (text[4] in ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'] or text[4] in dict_char_to_int.keys()) and \
-       (text[5] in ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'] or text[5] in dict_char_to_int.keys()) and \
-       (text[6] in ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'] or text[6] in dict_char_to_int.keys()) and \
-       ((text[7] in string.ascii_uppercase or text[7] in dict_int_to_char.keys())):
-        return True
-    else:
-        return False
     
-def format_license(text):
+def format_carplate(text):
 
-    license_plate_ = ''
+    plate = ''
 
     if text[0] == '[':
         text = text[1:]
 
-    mapping = {0: dict_int_to_char, 1: dict_int_to_char, 4: dict_char_to_int, 5: dict_char_to_int, 6: dict_char_to_int,
+    map = {0: dict_int_to_char, 1: dict_int_to_char, 4: dict_char_to_int, 5: dict_char_to_int, 6: dict_char_to_int,
                 2: dict_int_to_char, 3: dict_char_to_int, 7: dict_int_to_char}
     for j in [0, 1, 2, 3, 4, 5, 6, 7]:
-        if text[j] in mapping[j].keys():
-            license_plate_ += mapping[j][text[j]]
+        if text[j] in map[j].keys():
+            plate += map[j][text[j]]
         else:
-            license_plate_ += text[j]
+            plate += text[j]
 
-    return license_plate_
+    return plate
 
-def read_license_plate(license_plate_crop):
-    detections = reader.ocr(license_plate_crop)
+def correct_carplate_format(text):
+    if len(text) != 8:
+        return False
 
-    '''
-    for detection in detections:
-        bbox, text, score = detection
-        print(text)
-        text = text.upper().replace(' ', '')
-        return format_license(text)
-    '''
+    if (text[0] in string.ascii_uppercase and text[0] in ['S', '5']) and \
+       ((text[1] in string.ascii_uppercase or text[1] in dict_int_to_char.keys()) and text[1] not in ['1', '0', 'O', 'I']) and \
+       ((text[2] in  string.ascii_uppercase or text[2] in dict_char_to_int.keys()) and text[2] not in ['1', '0', 'O', 'I'] ) and \
+       (text[3] in ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'] or text[3] in dict_char_to_int.keys()) and \
+       (text[4] in ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'] or text[4] in dict_char_to_int.keys()) and \
+       (text[5] in ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'] or text[5] in dict_char_to_int.keys()) and \
+       (text[6] in ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'] or text[6] in dict_char_to_int.keys()) and \
+       ((text[7] in string.ascii_uppercase or text[7] in dict_int_to_char.keys()) and text[7] not in ['F', 'I', 'N', 'O', 'V', 'W']):
+        return True
+    else:
+        return False
+
+def read_carplate(carplate_crop):
+    detections = reader.ocr(carplate_crop)
+    result = 'INVALID'
 
     for detection in range(len(detections)):
         res = detections[detection]
         for line in res:
-            return format_license(str(line[-1][0]).replace(" ", ""))
-
-
-    #return format_license(text)
+            carplate_crop_str = str(line[-1][0]).replace(" ", "")
+            if (correct_carplate_format(carplate_crop_str)):
+                result = format_carplate(carplate_crop_str)
+    
+    return str(result)
 
 #source: https://stackoverflow.com/questions/76899615/yolov8-how-to-save-the-output-of-model
-def detect_license_plate(license_plate_img, model_path):
-    photo_path = os.path.join(license_plate_img)
+def detect_carplate(carplate_img, model_path, mqttStr):
+    photo_path = os.path.join(carplate_img)
     img_raw = Image.open(photo_path)
     
-    # Load a model
-    model = YOLO(model_path)  # load a custom model
+    # Load model
+    model = YOLO(model_path)  
     
-    # Run inference on an image
+    # Run inference
     detected = model(img_raw)
-    results = ''
-    license_plate_boxes = detected[0].boxes.data.cpu().numpy()
-    for i, box in enumerate(license_plate_boxes):
-        x1, y1, x2, y2, conf, cls = box
-        license_plate = img_raw.crop((x1, y1, x2, y2))
-        plate_filename = f'plates/license_plate_{i+1}.jpg'
-        license_plate.save(plate_filename)
+    result = ''    
+    carplate_boxes = detected[0].boxes.data.cpu().numpy()
+    print(f"License Plate Detected: {detected[0].boxes.data.cpu().numpy()}")
 
-        results = read_license_plate(plate_filename)
-        print(f"License Plate number: {results}")
+    if detected[0].boxes.data.cpu().numpy().size != 0: #carplate detected
+        for i, box in enumerate(carplate_boxes): #carplate detected
+            x1, y1, x2, y2, conf, cls = box
+        carplate = img_raw.crop((x1, y1, x2, y2))
+        carplate_filename = f'plates/carplate_{i+1}.jpg'
+        carplate.save(carplate_filename)
 
-    return results
+        result = read_carplate(carplate_filename)
+    
+    print(f"License Plate number: {result}")
+    connect_mqtt(result, mqttStr)
+
+    return result
 
 def connect_mqtt(carplate, publish_endpoint):
     def on_connect(client, userdata, flags, rc):
@@ -173,30 +169,24 @@ def upload_image_exit():
     flask_body('CARS_FOLDER_EXIT', TOPIC_MQTT_EXIT)
 
 def flask_body(upload_string, mqttStr):
-    # Check if a file was included in the POST request
     if 'file' not in request.files:
         return jsonify({'error': 'No file part'})
 
     file = request.files['file']
 
-    # Check if the file name is empty
     if file.filename == '':
         return jsonify({'error': 'No selected file'})
 
-    # Check if the file is allowed (you can customize this function)
     if not allowed_file(file.filename):
         return jsonify({'error': 'Invalid file format'})
 
-    # If the file is valid, save it to the specified upload folder
     if file:
         filename = os.path.join(app.config[upload_string], file.filename)
         file.save(filename)
-        result = str(detect_license_plate(filename, 'last.pt'))
-        connect_mqtt(result, mqttStr)
-        return redirect("message received") #url_for('upload_image_entrance', filename=filename))
+        detect_carplate(filename, 'last.pt', mqttStr)
+        return redirect("message received")
 
 if __name__ == '__main__':
-    # Ensure the "uploads" folder exists
     if not os.path.exists(UPLOAD_FOLDER_ENTRANCE):
         os.makedirs(UPLOAD_FOLDER_ENTRANCE)
 
