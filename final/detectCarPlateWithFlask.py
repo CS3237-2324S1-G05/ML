@@ -15,7 +15,7 @@ MY_IP_ADDRESS = "192.168.43.28"
 
 TOPIC_MQTT_ENTRANCE = "status/ml/entrance/carplate"
 TOPIC_MQTT_EXIT = "status/ml/exit/carplate"
-TOPIC_MQTT_LOT = "status/ml/lot/carplate/"
+TOPIC_MQTT_LOT = "status/ml/lot/carplate"
 
 # Initialize the OCR reader
 reader = PaddleOCR(use_angle_cls=True, lang='en')
