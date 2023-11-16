@@ -1,3 +1,5 @@
+#source for custom dataset training: https://github.com/computervisioneng/train-yolov8-custom-dataset-step-by-step-guide
+
 import os
 
 from flask import Flask, request, jsonify, url_for, redirect

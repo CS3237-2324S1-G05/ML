@@ -36,7 +36,7 @@ To use the code:
 
 ## Dependencies 📚
 
-This project requires the following libraries using pip or conda:
+This project requires the following python libraries using pip or conda:
 
 - For `final/`:
   - ultralytics@8.0.195
@@ -46,6 +46,12 @@ This project requires the following libraries using pip or conda:
   - pillow@10.0.0
 
 Please ensure that you have these libraries installed before running the project.
+
+## References Used 📚
+
+- Dataset for carplate recognition: https://universe.roboflow.com/roboflow-universe-projects/license-plate-recognition-rxg4e/dataset/4
+- Referenced source code for carplate recognition: https://github.com/computervisioneng/automatic-number-plate-recognition-python-yolov8
+- Referenced source code for Yolov8 training using custom dataset: https://github.com/computervisioneng/train-yolov8-custom-dataset-step-by-step-guide
 
 ---
 We're excited to see how you'll help us drive the future of smart parking! 🌟
