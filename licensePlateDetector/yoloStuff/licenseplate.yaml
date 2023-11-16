@@ -1,3 +1,0 @@
-path: licensePlateDetector/LicensePlateRecognition
-train: train/images
-val: valid/images

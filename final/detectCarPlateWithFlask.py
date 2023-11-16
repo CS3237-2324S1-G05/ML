@@ -10,7 +10,7 @@ from time import sleep
 from flask import Flask, request, jsonify, redirect
 from ultralytics import YOLO
 
-IPADDRESS_MQTT = "192.168.43.186"
+IPADDRESS_MQTT = "192.168.43.226"
 MY_IP_ADDRESS = "192.168.43.28"
 
 TOPIC_MQTT_ENTRANCE = "status/ml/entrance/carplate"

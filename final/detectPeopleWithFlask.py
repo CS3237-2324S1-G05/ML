@@ -7,7 +7,7 @@ from PIL import Image
 import paho.mqtt.client as mqtt
 from time import sleep
 
-IPADDRESS_MQTT = "192.168.43.186"
+IPADDRESS_MQTT = "192.168.43.226"
 MY_IP_ADDRESS = "192.168.43.28"
 
 TOPIC_MQTT = "status/ml/entrance/human-presence"
