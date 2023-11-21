@@ -1,6 +1,6 @@
 # Smart Carpark ML Codebase 🚗💡
 
-Welcome to the GitHub repository for the Smart Carpark system's ML codes! This code repository contains the detection models for the .
+Welcome to the GitHub repository for the Smart Carpark system's ML codes! This code repository contains the codes for car plate recognition and human detector.
 
 This is done as part of the Project for CS3237 - Introduction to Internet of Things, AY23/24 Semester 1.
 
